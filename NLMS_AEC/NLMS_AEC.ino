@@ -36,7 +36,7 @@
 void getBuffer1();
 void playData();
 void displayData();
-void NLMS_AEC();
+void NLMS_AEC(int16_t *x)
 
 // GUItool: begin automatically generated code
 AudioInputI2S            Mic;           //microphone
@@ -53,8 +53,8 @@ const int lFilt = numBlocks-1;
 const int gg = lFilt*128;
 int16_t *pAddr; //pointer to 128 block of getBuffer
 int16_t lblock = numBlocks*128; //length of arrays
-int16_t ablock[128*numBlocks];  // set an array block
-int16_t error[128]; 
+int16_t ablock[128*numBlocks] __attribute__ ((aligned (4)));  // set an array block
+int16_t error[128] __attribute__ ((aligned (4)));
 int16_t *Perror;
 int16_t *pablock; // pointer to an array block
 int16_t *pp; // pointer to getBuffer
@@ -64,7 +64,7 @@ unsigned long time1; // time variable
 
 //***************NMLS const and settings*************************
 const int16_t numTaps = gg;
-int16_t w[numTaps];
+int16_t w[numTaps] __attribute__ ((aligned (4)));
 
 
 //define input/source
@@ -94,7 +94,6 @@ void loop() {
 getBuffer1(numBlocks); //returns pointer to the buffered data
 //print sample to serial plotter 
 //displayData(pablock); // print data to serial plotter
-//NLMS_AEC(pablock,pablock);
 //for(int i = 0; i<128;i++){
 //  Serial.println(w[i]);
 //}
@@ -127,12 +126,12 @@ void getBuffer1(int x) {
         //read one 128 block of samples and copy it into array
         memcpy((byte*)pablock+(256*(x-1)),Memory.readBuffer(),256);
         Memory.freeBuffer(); // free buffer memory
-//        NLMS_AEC(pablock,pablock);
+//        NLMS_AEC(pablock);
 //        playData(Perror,0); // play 128 block from buffered array
         l = 1; // set n to 1 to get out of while loop
       }//end if 
     }//end while 
-    NLMS_AEC(pablock,pablock);
+    NLMS_AEC(pablock);
     playData(Perror,0); // play 128 block from buffered array
     l = 0;
    Memory.clear(); // clear all audio memory 
@@ -143,7 +142,7 @@ void getBuffer1(int x) {
 // NMLS algorithm
 // inputs are Mic Signal, far end signal and index of n-1 block wher n is the current block itteration
 // previous block data is used to modify current block data samples
-void NLMS_AEC(int16_t *Mic, int16_t *x)
+void NLMS_AEC(int16_t *x)
 {
   int16_t yhat = 0;
   int64_t xtdl = 0;
@@ -151,17 +150,17 @@ void NLMS_AEC(int16_t *Mic, int16_t *x)
   int16_t mu = 13;
   int8_t psi = 1;
 
-  for(int h = 0; h < 128; h+=1){
-    for(int j = gg; j > 0; j-=1){
+  for(int h = 0; h < 128; h+=1) {
+    for(int j = gg; j > 0; j-=1) {
       yhat += (x[j+h]*w[gg-j])/32768;
       xtdl += x[j+h]*x[j+h];
     }
-    error[h] = Mic[gg+h]-yhat;
+    error[h] = x[gg+h]-yhat;
     xtdl = xtdl + psi;
     mu0 = (67108864*mu)/xtdl;
  
     //update filter taps
-    for(int j = 0; j<gg;j+=1){
+    for(int j = 0; j<gg;j+=1) {
       w[j] = w[j] + (x[gg-j+h]*mu0*error[h])/131072;
     }//end for
   }//end for outer
