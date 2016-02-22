@@ -65,7 +65,6 @@ unsigned long time1; // time variable
 //***************NMLS const and settings*************************
 const int16_t numTaps = gg;
 int16_t w[numTaps];
-int16_t *pw; // pointer to w 
 
 
 //define input/source
@@ -76,7 +75,6 @@ void setup() {
   memset(ablock,100,128*numBlocks*2);
   memset(error,0,128);
   //initialize pointers for NLMS
-  pw = w;
   Perror = error;
   Serial.begin(9600); // initiate baud rate for serial comm.
   AudioMemory(8); // allocate # of audio memory (each block has 128 sample of data)
@@ -153,9 +151,9 @@ void NLMS_AEC(int16_t *Mic, int16_t *x)
   int16_t mu = 13;
   int8_t psi = 1;
 
-  for(int h = 0; h<128;h+=1){
-    for(int j = gg; j>0;j-=1){
-      yhat += (x[j+h]*pw[gg-j])/32768;
+  for(int h = 0; h < 128; h+=1){
+    for(int j = gg; j > 0; j-=1){
+      yhat += (x[j+h]*w[gg-j])/32768;
       xtdl += x[j+h]*x[j+h];
     }
     error[h] = Mic[gg+h]-yhat;
@@ -164,7 +162,7 @@ void NLMS_AEC(int16_t *Mic, int16_t *x)
  
     //update filter taps
     for(int j = 0; j<gg;j+=1){
-      pw[j] = pw[j] + (x[gg-j+h]*mu0*error[h])/131072;
+      w[j] = w[j] + (x[gg-j+h]*mu0*error[h])/131072;
     }//end for
   }//end for outer
 }// end NLMS_AEC
