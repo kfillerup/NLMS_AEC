@@ -36,7 +36,7 @@
 void getBuffer1();
 void playData();
 void displayData();
-void NLMS_AEC();
+void NLMS_AEC(int16_t *x);
 
 // GUItool: begin automatically generated code
 AudioInputI2S            Mic;           //microphone
@@ -53,8 +53,8 @@ const int lFilt = numBlocks-1;
 const int gg = lFilt*128;
 int16_t *pAddr; //pointer to 128 block of getBuffer
 int16_t lblock = numBlocks*128; //length of arrays
-int16_t ablock[128*numBlocks];  // set an array block
-int16_t error[128]; 
+int16_t ablock[128*numBlocks] __attribute__ ((aligned (4)));  // set an array block
+int16_t error[128] __attribute__ ((aligned (4)));
 int16_t *Perror;
 int16_t *pablock; // pointer to an array block
 int16_t *pp; // pointer to getBuffer
@@ -64,13 +64,7 @@ unsigned long time1; // time variable
 
 //***************NMLS const and settings*************************
 const int16_t numTaps = gg;
-int16_t mu = 13;
-int16_t mu0 = 0;
-int8_t psi = 1;
-int16_t w[numTaps];
-int16_t *pw; // pointer to w 
-int16_t yhat = 0;
-int64_t xtdl = 0;
+int16_t w[numTaps] __attribute__ ((aligned (4)));
 
 
 //define input/source
@@ -81,7 +75,6 @@ void setup() {
   memset(ablock,100,128*numBlocks*2);
   memset(error,0,128);
   //initialize pointers for NLMS
-  pw = w;
   Perror = error;
   Serial.begin(9600); // initiate baud rate for serial comm.
   AudioMemory(8); // allocate # of audio memory (each block has 128 sample of data)
@@ -101,7 +94,6 @@ void loop() {
 getBuffer1(numBlocks); //returns pointer to the buffered data
 //print sample to serial plotter 
 //displayData(pablock); // print data to serial plotter
-//NLMS_AEC(pablock,pablock);
 //for(int i = 0; i<128;i++){
 //  Serial.println(w[i]);
 //}
@@ -134,12 +126,12 @@ void getBuffer1(int x) {
         //read one 128 block of samples and copy it into array
         memcpy((byte*)pablock+(256*(x-1)),Memory.readBuffer(),256);
         Memory.freeBuffer(); // free buffer memory
-//        NLMS_AEC(pablock,pablock);
+//        NLMS_AEC(pablock);
 //        playData(Perror,0); // play 128 block from buffered array
         l = 1; // set n to 1 to get out of while loop
       }//end if 
     }//end while 
-    NLMS_AEC(pablock,pablock);
+    NLMS_AEC(pablock);
     playData(Perror,0); // play 128 block from buffered array
     l = 0;
    Memory.clear(); // clear all audio memory 
@@ -147,24 +139,71 @@ void getBuffer1(int x) {
 //   return ablock; // regurn pointer to array
 }
 
+//#define USE_DSP_EXTENSIONS
+
 // NMLS algorithm
 // inputs are Mic Signal, far end signal and index of n-1 block wher n is the current block itteration
 // previous block data is used to modify current block data samples
-void NLMS_AEC(int16_t *Mic, int16_t *x){
-  for(int h = 0; h<128;h+=1){
-    for(int j = gg; j>0;j-=1){
-      yhat += (x[j+h]*pw[gg-j])/32768;
-      xtdl += x[j+h]*x[j+h];
-    }
-    error[h] = Mic[gg+h]-yhat;
-    yhat = 0;
+void NLMS_AEC(int16_t *x)
+{
+  int16_t yhat = 0;
+  int64_t xtdl = 0;
+  int16_t mu0;
+  int16_t mu = 13;
+  int8_t psi = 1;
+
+  //uint32_t begin_micros = micros();
+#ifdef USE_DSP_EXTENSIONS
+  for (int h = 0; h < 128; h+=1) {
+    uint32_t *ww =   (uint32_t *)(w);
+    uint32_t *wend = (uint32_t *)(w + gg);
+    uint32_t *xx = (uint32_t *)&(x[128 + h - 4]);
+    int64_t yhat64 = 0;
+    do {
+      // TODO: avoid slow unaligned access when h is odd
+      uint32_t w1 = *ww++; // bring in 4 values from w[]
+      uint32_t w2 = *ww++;
+      uint32_t x1 = *xx++; // bring in 4 values from x[]
+      uint32_t x2 = *xx++;
+      xx -= 8;
+      // x order: w1b, w1t, w2b, w2t
+      // w order: x2t, x2b, x1t, x1b
+      yhat64 = multiply_accumulate_16tx16b_add_16bx16t(yhat64, x2, w1);
+      yhat64 = multiply_accumulate_16tx16b_add_16bx16t(yhat64, w2, x1);
+      xtdl = multiply_accumulate_16tx16t_add_16bx16b(xtdl, x1, x1);
+      xtdl = multiply_accumulate_16tx16t_add_16bx16b(xtdl, x2, x2);
+    } while (ww < wend);
+    yhat = yhat64 / 32768;
+
+    error[h] = x[gg+h]-yhat;
     xtdl = xtdl + psi;
     mu0 = (67108864*mu)/xtdl;
-    xtdl = 0;
- 
+
     //update filter taps
-    for(int j = 0; j<gg;j+=1){
-    pw[j] = pw[j] + (x[gg-j+h]*mu0*error[h])/131072;
+    for(int j = 0; j<gg;j+=1) {
+      w[j] = w[j] + (x[gg-j+h]*mu0*error[h])/131072;
     }//end for
   }//end for outer
+
+#else
+  for(int h = 0; h < 128; h+=1) {
+    for(int j = gg; j > 0; j-=1) {
+      // j from 128 to 0
+      // j+h from h+128 to h
+      // gg-j from 0 to 128
+      yhat += (x[j+h]*w[gg-j])/32768;
+      xtdl += x[j+h]*x[j+h];
+    }
+    error[h] = x[gg+h]-yhat;
+    xtdl = xtdl + psi;
+    mu0 = (67108864*mu)/xtdl;
+ 
+    //update filter taps
+    for(int j = 0; j<gg;j+=1) {
+      w[j] = w[j] + (x[gg-j+h]*mu0*error[h])/131072;
+    }//end for
+  }//end for outer
+#endif
+  //uint32_t end_micros = micros();
+  //Serial.println(end_micros - begin_micros);
 }// end NLMS_AEC
