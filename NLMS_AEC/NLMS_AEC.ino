@@ -64,13 +64,8 @@ unsigned long time1; // time variable
 
 //***************NMLS const and settings*************************
 const int16_t numTaps = gg;
-int16_t mu = 13;
-int16_t mu0 = 0;
-int8_t psi = 1;
 int16_t w[numTaps];
 int16_t *pw; // pointer to w 
-int16_t yhat = 0;
-int64_t xtdl = 0;
 
 
 //define input/source
@@ -150,21 +145,26 @@ void getBuffer1(int x) {
 // NMLS algorithm
 // inputs are Mic Signal, far end signal and index of n-1 block wher n is the current block itteration
 // previous block data is used to modify current block data samples
-void NLMS_AEC(int16_t *Mic, int16_t *x){
+void NLMS_AEC(int16_t *Mic, int16_t *x)
+{
+  int16_t yhat = 0;
+  int64_t xtdl = 0;
+  int16_t mu0;
+  int16_t mu = 13;
+  int8_t psi = 1;
+
   for(int h = 0; h<128;h+=1){
     for(int j = gg; j>0;j-=1){
       yhat += (x[j+h]*pw[gg-j])/32768;
       xtdl += x[j+h]*x[j+h];
     }
     error[h] = Mic[gg+h]-yhat;
-    yhat = 0;
     xtdl = xtdl + psi;
     mu0 = (67108864*mu)/xtdl;
-    xtdl = 0;
  
     //update filter taps
     for(int j = 0; j<gg;j+=1){
-    pw[j] = pw[j] + (x[gg-j+h]*mu0*error[h])/131072;
+      pw[j] = pw[j] + (x[gg-j+h]*mu0*error[h])/131072;
     }//end for
   }//end for outer
 }// end NLMS_AEC
