@@ -36,7 +36,7 @@
 void getBuffer1();
 void playData();
 void displayData();
-void NLMS_AEC(int16_t *x)
+void NLMS_AEC(int16_t *x);
 
 // GUItool: begin automatically generated code
 AudioInputI2S            Mic;           //microphone
@@ -139,6 +139,8 @@ void getBuffer1(int x) {
 //   return ablock; // regurn pointer to array
 }
 
+//#define USE_DSP_EXTENSIONS
+
 // NMLS algorithm
 // inputs are Mic Signal, far end signal and index of n-1 block wher n is the current block itteration
 // previous block data is used to modify current block data samples
@@ -150,8 +152,45 @@ void NLMS_AEC(int16_t *x)
   int16_t mu = 13;
   int8_t psi = 1;
 
+  //uint32_t begin_micros = micros();
+#ifdef USE_DSP_EXTENSIONS
+  for (int h = 0; h < 128; h+=1) {
+    uint32_t *ww =   (uint32_t *)(w);
+    uint32_t *wend = (uint32_t *)(w + gg);
+    uint32_t *xx = (uint32_t *)&(x[128 + h - 4]);
+    int64_t yhat64 = 0;
+    do {
+      // TODO: avoid slow unaligned access when h is odd
+      uint32_t w1 = *ww++; // bring in 4 values from w[]
+      uint32_t w2 = *ww++;
+      uint32_t x1 = *xx++; // bring in 4 values from x[]
+      uint32_t x2 = *xx++;
+      xx -= 8;
+      // x order: w1b, w1t, w2b, w2t
+      // w order: x2t, x2b, x1t, x1b
+      yhat64 = multiply_accumulate_16tx16b_add_16bx16t(yhat64, x2, w1);
+      yhat64 = multiply_accumulate_16tx16b_add_16bx16t(yhat64, w2, x1);
+      xtdl = multiply_accumulate_16tx16t_add_16bx16b(xtdl, x1, x1);
+      xtdl = multiply_accumulate_16tx16t_add_16bx16b(xtdl, x2, x2);
+    } while (ww < wend);
+    yhat = yhat64 / 32768;
+
+    error[h] = x[gg+h]-yhat;
+    xtdl = xtdl + psi;
+    mu0 = (67108864*mu)/xtdl;
+
+    //update filter taps
+    for(int j = 0; j<gg;j+=1) {
+      w[j] = w[j] + (x[gg-j+h]*mu0*error[h])/131072;
+    }//end for
+  }//end for outer
+
+#else
   for(int h = 0; h < 128; h+=1) {
     for(int j = gg; j > 0; j-=1) {
+      // j from 128 to 0
+      // j+h from h+128 to h
+      // gg-j from 0 to 128
       yhat += (x[j+h]*w[gg-j])/32768;
       xtdl += x[j+h]*x[j+h];
     }
@@ -164,4 +203,7 @@ void NLMS_AEC(int16_t *x)
       w[j] = w[j] + (x[gg-j+h]*mu0*error[h])/131072;
     }//end for
   }//end for outer
+#endif
+  //uint32_t end_micros = micros();
+  //Serial.println(end_micros - begin_micros);
 }// end NLMS_AEC
