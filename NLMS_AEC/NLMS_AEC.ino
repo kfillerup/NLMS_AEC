@@ -36,7 +36,7 @@
 void getBuffer1();
 void playData();
 void displayData();
-void NLMS_AEC(int16_t *x);
+void NLMS_AEC(int16_t *Mic, int16_t *x);
 
 // GUItool: begin automatically generated code
 AudioInputI2S            Mic;           //microphone
@@ -126,12 +126,12 @@ void getBuffer1(int x) {
         //read one 128 block of samples and copy it into array
         memcpy((byte*)pablock+(256*(x-1)),Memory.readBuffer(),256);
         Memory.freeBuffer(); // free buffer memory
-//        NLMS_AEC(pablock);
+//        NLMS_AEC(pablock, pablock);
 //        playData(Perror,0); // play 128 block from buffered array
         l = 1; // set n to 1 to get out of while loop
       }//end if 
     }//end while 
-    NLMS_AEC(pablock);
+    NLMS_AEC(pablock, pablock);
     playData(Perror,0); // play 128 block from buffered array
     l = 0;
    Memory.clear(); // clear all audio memory 
@@ -144,7 +144,7 @@ void getBuffer1(int x) {
 // NMLS algorithm
 // inputs are Mic Signal, far end signal and index of n-1 block wher n is the current block itteration
 // previous block data is used to modify current block data samples
-void NLMS_AEC(int16_t *x)
+void NLMS_AEC(int16_t *Mic, int16_t *x)
 {
   int16_t yhat = 0;
   int64_t xtdl = 0;
@@ -175,7 +175,7 @@ void NLMS_AEC(int16_t *x)
     } while (ww < wend);
     yhat = yhat64 / 32768;
 
-    error[h] = x[gg+h]-yhat;
+    error[h] = Mic[gg+h]-yhat;
     xtdl = xtdl + psi;
     mu0 = (67108864*mu)/xtdl;
 
