@@ -1,0 +1,28 @@
+#######################################
+# Syntax Coloring Map UartEvent
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+UartEvent	KEYWORD1
+Uart1Event	KEYWORD1
+Uart2Event	KEYWORD1
+Uart3Event	KEYWORD1
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+loopBack	KEYWORD2
+txEventHandler	KEYWORD2
+rxEventHandler	KEYWORD2
+rxBufferSize	KEYWORD2
+txBufferSize	KEYWORD2
+rxTermCharacterTrigger	KEYWORD2
+rxBufferSizeTrigger	KEYWORD2
+#######################################
+# Instances (KEYWORD2)
+#######################################
+
+#######################################
+# Constants (LITERAL1)
+#######################################

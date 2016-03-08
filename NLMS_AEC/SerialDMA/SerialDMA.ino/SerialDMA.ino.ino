@@ -1,5 +1,15 @@
+/*****************************************************
+ * This UartEvent example shows the "RX Buffer Size"
+ * event where it will fire the RX event handler when
+ * the buffer is full. You can have any size but it
+ * cannot be greater than the internal buffer size - 1.
+ *
+ * By using the loopback feature we can test the
+ * sending and receiving without having to connect
+ * up anything. If you want to disable this feature
+ * comment it out.
+ *****************************************************/
 
-// 
 // Microphone to Speaker output
 #define NUMEL(x) (sizeof(x)/sizeof((x)[0])) // retuns/calculates the size of an array
 
@@ -11,23 +21,12 @@
 #include <SerialFlash.h>
 #include <UartEvent.h>
 
-
-//*******UART************
-Uart1Event Event1;
-volatile bool print_flag = false;// flag to indicate rx buffer size has been met
-
-const uint16_t BUFSIZE = Event1.rxBufferSize;// size of internal buffer
-uint8_t buffer[BUFSIZE]; // user variable to hold incoming data
-uint8_t TRANSMIT[BUFSIZE-1];
-
-
 //*****functions**********
 void getBuffer1();
 void playData();
 void displayData();
 void NLMS_AEC1();
 int64_t dotp();
-
 
 // GUItool: begin automatically generated code
 AudioInputI2S            Mic;           //microphone
@@ -52,6 +51,13 @@ int16_t *pp; // pointer to getBuffer
 int n;
 unsigned long time1; // time variable
 
+//************** UART SETTINGS *********************************
+Uart1Event Event1;
+volatile bool print_flag = false;// flag to indicate rx buffer size has been met
+
+const uint16_t BUFSIZE = Event1.rxBufferSize;// size of internal buffer
+uint8_t buffer[BUFSIZE]; // user variable to hold incoming data
+uint8_t TRANSMIT[BUFSIZE-1];
 
 //***************NMLS const and settings*************************
 const int16_t numTaps = gg;
@@ -68,11 +74,14 @@ int i = 0;
 //define input/source
 const int micInput = AUDIO_INPUT_MIC;
 
-void setup() {
-  
-  Serial.begin(9600); // initiate baud rate for serial comm.
-  while (!Serial);
 
+void setup() {
+
+    pinMode(LED_BUILTIN, OUTPUT);
+    Serial.begin(0);
+    while (!Serial);
+    delay(100);
+    
   //--------------------------Uart1Event Configuration--------------------------------
   //Event1.loopBack = true;                   // internal loopback set / "default = false"
   //Event1.txEventHandler = tx1Event;         // event handler Serial1 TX
@@ -80,12 +89,12 @@ void setup() {
     Event1.rxBufferSizeTrigger = BUFSIZE-1; // set trigger for (buffer size) - 1
     Event1.begin(9600);                       // start serial port
   //----------------------------------------------------------------------------------
-        
-  Serial.print("RX Trigger will fire when this many bytes are avaliable -> ");
-  Serial.println(BUFSIZE - 1); // print the size of the internal RX buffer
+    
+    Serial.print("RX Trigger will fire when this many bytes are avaliable -> ");
+    Serial.println(BUFSIZE - 1); // print the size of the internal RX buffer
 
-  delay(1000);
-  
+    delay(1000);
+
   mu = 34359738368*mu;  // scale mu 
   memset(w,0,numTaps);
   memset(ablock,100,128*numBlocks*2);
@@ -101,13 +110,18 @@ void setup() {
   //set array values to zero
   pablock = ablock; // assign pointer to array
   delay(1000);
-}
 
+
+}
 
 //***************************MAIN LOOP********************************************************************
 void loop() {
-Serial.println(micros()); // print time 
+//Serial.println(micros()); // print time 
 getBuffer1(numBlocks); //returns pointer to the buffered dat
+
+Event1.write((byte*)error, 256);
+Event1.flush();
+
 //print sample to serial plotter 
 //displayData(pablock); // print data to serial plotter
 //NLMS_AEC(pablock,pablock);
@@ -117,6 +131,20 @@ getBuffer1(numBlocks); //returns pointer to the buffered dat
 //}
 }
 
+//--------------------------------------Serial1 Events--------------------------------
+//void tx1Event(void) {
+//    // TX Event function will fire when it is finished sending a packet
+//}
+
+void rx1Event(void) {
+    Serial.println("RX Interupt");
+    // RX Event function prints the buffer when it is full
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    while (Event1.available())
+    Event1.readBytes(buffer,256);
+    Event1.flush();
+    print_flag = true;
+}
 
 //*********************************************************************************************************
 // print data to serial plotter
@@ -152,9 +180,9 @@ void getBuffer1(int x){
     l = 0;
    Memory.clear(); // clear all audio memory 
    Memory.end();
-   NLMS_AEC(pablock,pablock,Perror,pw,gg,mu,5,1);
+   NLMS_AEC(pablock,(int16_t*)buffer,Perror,pw,gg,mu,5,1);
+   //NLMS_AEC(pablock,pablock,Perror,pw,gg,mu,5,1);
    playData(); // play 128 block from buffered array
 //   return ablock; // regurn pointer to array
 }
-
 
